@@ -112,11 +112,11 @@ void ACharacterBase::PostInitializeComponents()
 	SkeletalMesh = GetMesh();
 	if (SkeletalMesh != nullptr)
 	{
-  	    //check(SkeletalMesh != nullptr && "Character does not have a skeletal mesh component!");
+  	    check(SkeletalMesh != nullptr && "Character does not have a skeletal mesh component!");
 
 		//Retrieve the animation instance.
 		AnimationInstance = Cast<UCharacterBaseAnimation>(SkeletalMesh->GetAnimInstance());
-		//check(AnimationInstance != nullptr && "Character does not have an animation instance!");
+		check(AnimationInstance != nullptr && "Character does not have an animation instance!");
 	}
 
 
@@ -127,8 +127,8 @@ void ACharacterBase::SetupPlayerInputComponent(class UInputComponent* pInputComp
 	Super::SetupPlayerInputComponent(pInputComponent);
 
     //TODO Week 7: Set the player name
-    //IF GetPlayerState()
-        //CALL GetPlayerState()->SetPlayerName() and pass in PlayerName
+    if (GetBasePlayerState())
+        GetBasePlayerState()->SetPlayerName(PlayerName);
     //ENDIF
 
        
@@ -141,37 +141,36 @@ void ACharacterBase::BeginPlay()
     PlayerName = GetFName().ToString();
   
     //TODO Week 7: Attempt to set the NetIndex
-    //IF Role is Authority
+    if ( GetLocalRole() == ROLE_Authority)
     {
         //WHOOPS! WON'T WORK IF PLAYERS ARE ALL ADDED AT SAME TIME
         //Set an index reference for this character based on what number player it is in the game
         //SET/ASSIGN NetIndex to GetWorld()->GetGameState()->AuthorityGameMode->GetNumPlayers() - 1
-
+        NetIndex = GetWorld()->GetGameState()->AuthorityGameMode->GetNumPlayers() - 1;
     }
     //ENDIF
 
     //TODO Week 7: START the UpdateHandle and PostBeginPlay Timers
     //UpdateHandle arguments (looping): UpdateHandle, this, &ACharacterBase::UpdateAndCheckPlayer, 0.03333f, true, 0.0f 
+    GetWorldTimerManager().SetTimer(UpdateHandle, this, &ACharacterBase::UpdateAndCheckPlayer, 0.03333f, true, 0.0f);
     
     //PostBeginPlay arguments (non looping: PostBeginPlayDelay, this, &ACharacterBase::PostBeginPlay, 2.0f, false
-    
+    GetWorldTimerManager().SetTimer(PostBeginPlayDelay, this, &ACharacterBase::PostBeginPlay, 2.0f, false);
     
 }
 void ACharacterBase::PostBeginPlay()
 {
-    //TODO Week 7: Assign the AI character a team of -1
+    // Assign the AI character a team of -1
     if (ActorHasTag("AICharacter"))
     {
         playerTeam = -1;
         return;
     }
 
-  //TODO Week 7: Assign Team Colors
-    //IF Role is Authority
-    
-         //CALL Multicast_AssignTeamsColor()
-    
-    //ENDIF
+  // Assign Team Colors
+    if (GetLocalRole() == ROLE_Authority)
+        Multicast_AssignTeamsColor();
+        
 }
 
 void ACharacterBase::UpdateAndCheckPlayer()
@@ -202,49 +201,45 @@ void ACharacterBase::AssignTeams()
     TeamOneCount = GetGameState()->TeamOneSize;
     TeamTwoCount = GetGameState()->TeamTwoSize;
 
-    //IF TeamOneCOunt is EQUAL to TeamTwoCount    
+    if (TeamOneCount == TeamTwoCount)
     {
-        //IF The Net Mode is Dedicated Server
+        if (GetNetMode() == NM_DedicatedServer)
         {
             //GET The GameState and Increment TeamOneSize
-
+            GetGameState()->TeamOneSize++;
             //SET/ASSIGN playerTeam to 0
-
+            playerTeam = 0;
         }
-        //ELSE
+        else
         {
-            //GET The GameState and Increment TeamTwoSize
+            GetGameState()->TeamTwoSize++;
 
             //SET/ASSIGN playerTeam to 1
-
+            playerTeam = 1;
         }
-        //ENDIF
     }
-    //ENDIF
     //If either of the teams is larger than the other, assign the player to the team with less to balance them
-    //ELSE
-    
+    else
     {
-        //IF TeamOneCount is GREATER than TeamTwoCount    
+        if (TeamOneCount > TeamTwoCount)    
         {
-            //GET the Game State and Increment TeamTwoSize
-
-            //SET/Assign playerTeam to 1
-
+            GetGameState()->TeamTwoSize++;
+            playerTeam = 1;
         }
-        //ELSE IF TeamOneCount IS LESS THAN TeamTwoCount
+        else if (TeamOneCount < TeamTwoCount)
         {
             //GET the Game State and Increment TeamOneSize
-
+            GetGameState()->TeamOneSize++;
             //SET/Assign playerTeam to 0
-
+            playerTeam = 0;
         }
-        //ENDIF
-    }//ENDELSE
+       
+    }
 
     //Update the PlayerTeam on the PlayerState
     //CALL GetPlayerState() and SET the PlayerTeam to this instance's playerTeam
-    
+    if (GetBasePlayerState())
+        GetBasePlayerState()->PlayerTeam = playerTeam;
 }
 
 //TODO Week 7: Sets the Net Index for this character
@@ -255,32 +250,37 @@ void ACharacterBase::AssignNetIndex()
 
 //TODO Week 7:Sets the player's 3rd person materials to their respective team's materials if specified in game state
 void ACharacterBase::Multicast_AssignTeamsColor_Implementation()
-{ 
-    //IF GetGameSate()
-    {       
+{
+    //IF GetGameState()
+    if (GetGameState()) //
+    {
         //If we're on team one
         //IF playerTEam is 0
+        if (playerTeam == 0)
         {
             //If the first person material array for team one isn't null,
             //assign those materials to the first person mesh
             //IF GetGameState()->TeamOnePMaterials.Num() is GREATER than 0
+            if (GetGameState()->TeamOnePMaterials.Num() > 0)
             {
                 //SET/ASSIGN DefaultTPMaterials to the GameStates's TeamOnePMaterials
-
+                DefaultTPMaterials = GetGameState()->TeamOnePMaterials;
                 //CALL ApplyMaterialsToMesh() and pass in GetSkeletalMesh(), DefaultTPMaterials
-
+                ApplyMaterialsToMesh(GetSkeletalMesh(), DefaultTPMaterials);
             }
 
         }
         //ELSE IF playerTeam is 1  //Otherwise if we're on team two, do the same as above but for team two        
+        else if (playerTeam == 1)
         {
             //IF GetGameState()->TeamTwoPMaterials.Num() is GREATER than 0
-             {
-                 //SET/ASSIGN DefaultTPMaterials to the GameStates's TeamTwoPMaterials
-
-                 //CALL ApplyMaterialsToMesh() and pass in GetSkeletalMesh(), DefaultTPMaterials
-
-             }
+            if (GetGameState()->TeamTwoPMaterials.Num() > 0)
+            {
+                //SET/ASSIGN DefaultTPMaterials to the GameStates's TeamTwoPMaterials
+                DefaultTPMaterials = GetGameState()->TeamTwoPMaterials;
+                //CALL ApplyMaterialsToMesh() and pass in GetSkeletalMesh(), DefaultTPMaterials
+                ApplyMaterialsToMesh(GetSkeletalMesh(), DefaultTPMaterials);
+            }
         }
         //ENDIF
     }
@@ -290,23 +290,25 @@ void ACharacterBase::Multicast_AssignTeamsColor_Implementation()
 //TODO Week 7: Assigns an array of materials to a SkeletalMeshComponent via Multicast _Implementation
 void ACharacterBase::ApplyMaterialsToMesh(USkeletalMeshComponent* InMeshComp, const TArray<UMaterialInterface*>& InMaterials)
 {
-    //CALL SetMaterialToMesh() pass in InMeshComp, InMaterials
+    SetMaterialToMesh(InMeshComp, InMaterials); 
     
 }
 //TODO Week 7: Set the material to the mesh passed in
 void ACharacterBase::SetMaterialToMesh(USkeletalMeshComponent* InMeshComp, const TArray<UMaterialInterface*>& InMaterials)
 {
     //If our specified SkeletalMeshComponent isn't null and our array isn't empty
-    //IF InMeshComp is NOT nullptr AND InMaterials.Num() IS GREATER THAN 0    
+    if ( InMeshComp != nullptr && InMaterials.Num() > 0)
     {
         //For each material in the array (InMaterials), assign it to the respective slot in the SkeletalMeshComponent (Can use a regular For Loop)
+        for (int i = 0; i < InMaterials.Num(); i++)
         {
             //GET the material at "i" in InMaterials and assign it to a temporary variable called MaterialToAssign of type UMaterialInterface*
-
+            UMaterialInterface* MaterialToAssign = InMaterials[i];
             //IF MaterialToAssign is NOT nullptr
+            if (MaterialToAssign != nullptr)
             {
                 //CALL SetMaterial() on the InMeshComp and pass in i, MaterialToAssign
-
+                InMeshComp->SetMaterial(i, MaterialToAssign);
             }
             //ENDIF
         }
@@ -689,12 +691,13 @@ bool ACharacterBase::NetMulticastOnDeath_Validate()
 void ACharacterBase::OnDeath(AActor* KilledBy)
 {
     //TODO Week 7: Set Last Damaged By when Killed
-    //If the PlayerState is not null (Call GetPlayerState())
+    // the PlayerState is not null (Call GetPlayerState())
+    if (GetBasePlayerState())
     {
         //SET the LastDamagedByName on the player state (CALL GetPlayerState) to the KilledBy's PlayerName (Cast KilledBy as ACharacterBase)
-
+        GetBasePlayerState()->LastDamagedByName = Cast<ACharacterBase>(KilledBy)->PlayerName;
         //DRAW a debug message
-
+        GEngine->AddOnScreenDebugMessage(-1, 15, FColor::Black, "Killed By: " + GetBasePlayerState()->LastDamagedByName);
     }
     //ENDIF	
 
@@ -708,25 +711,29 @@ void ACharacterBase::OnDeath(AActor* KilledBy)
 
     //TODO Week 7: Set the GameStae variables
     //IF Role is Authority
+    if (GetLocalRole() == ROLE_Authority)
     {
         //IF playerTeam is 0
+        if (playerTeam == 0)
         {
             //GetGameState and Increment TeamTwoScore
+            GetGameState()->TeamTwoScore++;
 
             //GetGameState and decrement TeamOneSize
-
+            GetGameState()->TeamOneSize--;
         }
-        //ELSE
+        else
         {
             //GetGameState and Increment TeamOneScore
-
+            GetGameState()->TeamOneSize++;
             //GetGameState and decrement TeamTwoSize
-
+            GetGameState()->TeamTwoScore--;
         }
         //ENDIF
 
         //START a respawn handler to CALL Respawn() after 5 seconds (Non Looping)
-
+        FTimerHandle respawn;
+        GetWorldTimerManager().SetTimer(respawn, this, &ACharacterBase::Respawn, 5.0f, false);
     }
     //ENDIF
    
@@ -735,18 +742,18 @@ void ACharacterBase::OnDeath(AActor* KilledBy)
 void ACharacterBase::Respawn()
 {
     //IF Role is Authority
+    if (GetLocalRole() == ROLE_Authority)
     {
         //GET the ABaseGameMode and assign it to a variable called GM
-
+        ABaseGameMode* GM = Cast<ABaseGameMode>(GetWorld()->GetAuthGameMode());
         //IF GM is NOT nullptr
+        if (GM)
         {
             //CALL RespawnPlayer() on the GM passing in playerTeam, NetIndex
-
-
+            GM->RespawnPlayer(Cast<APlayerController>(GetController()), playerTeam, NetIndex);
+            Destroy();
         }
-        //ENDIF
     }
-    //ENDIF
 }
 
 
@@ -779,41 +786,44 @@ void ACharacterBase::HandleOverlap(UPrimitiveComponent* OverlappedComponent, AAc
 {
     GEngine->AddOnScreenDebugMessage(-1, 15, FColor::Black, "OVERLAPP");
     //IF Role is Authority
+    if (GetLocalRole() == ROLE_Authority)
     {
         //IF OtherActor is not nullptr
+        if (OtherActor)
         {
             //IF OtherActor has the tag "Health"
+            if (OtherActor->ActorHasTag("Health"))
             {
                 //DECLARE a AHealthPickup* called HealthPickup and ASSIGN it to the return of Cast<AHealthPickup>(OtherActor)
-
+                AHealthPickup* HealthPickup = Cast<AHealthPickup>(OtherActor);
                 //IF Health is NOT nullptr
+                if (Health)
                 {      
                     //CALL ReplenishHealth on Health (this actors Health component) and pass in the HealthPickup's HealthValue
-
+                    Health->ReplenishHealth(HealthPickup->HealthValue);
                     //CALL Destroy on the HealthPickup
-
+                    HealthPickup->Destroy();
                 }
                 //ENDIF
             }
             //ENDIF
 
              //IF OtherActor has the tag "Ammo"
+            if (OtherActor->ActorHasTag("Ammo"))
             {
                 //DECLARE a AAmmoPickup* called AmmoPickup and ASSIGN it to the return of Cast<AAmmoPickup>(OtherActor)
-
+                AAmmoPickup* AmmoPickup = Cast<AAmmoPickup>(OtherActor);
                 //IF CurrentWeapon is NOT nullptr
+                if (CurrentWeapon)
                 {
                     //CALL ReplenishAmmo() on the CurrentWeapon and pass in AmmoPickup's Capacity
-
+                    CurrentWeapon->ReplenishAmmo(AmmoPickup->Capacity);
                     //CALL Destroy on the AmmoPickup
-
+                    AmmoPickup->Destroy();
                 }
-                //ENDIF
             }
         }
-        //ENDIF
     }
-    //ENDIF
 }
 
 

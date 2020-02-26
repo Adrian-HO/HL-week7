@@ -9,6 +9,14 @@ void ABasePlayerState::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & 
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
    
+    DOREPLIFETIME(ABasePlayerState, Kills);
+    DOREPLIFETIME(ABasePlayerState, MatchKills);
+    DOREPLIFETIME(ABasePlayerState, Deaths);
+    DOREPLIFETIME(ABasePlayerState, MatchDeaths);
+    DOREPLIFETIME(ABasePlayerState, XPGained);
+    DOREPLIFETIME(ABasePlayerState, playerScore);
+    DOREPLIFETIME(ABasePlayerState, PlayerTeam);
+    DOREPLIFETIME(ABasePlayerState, MatchScore);
 }
 
 void ABasePlayerState::Tick(float DeltaSeconds)
